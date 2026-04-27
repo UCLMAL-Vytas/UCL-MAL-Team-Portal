@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+:root {
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 255, 255, 255;
+  --background-end-rgb: 255, 255, 255;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: white;
+  min-height: 100vh;
+  font-family: Helvetica, Arial, sans-serif;
+}
+
+@layer base {
+  body {
+    @apply antialiased;
+  }
+}
+
+/* Custom styles for FullCalendar - Minimalist Grid */
+.fc {
+  @apply !bg-white !rounded-none !border !border-black !p-0;
+  font-family: Helvetica, Arial, sans-serif !important;
+}
+
+.fc-theme-standard td, .fc-theme-standard th {
+  @apply !border-black;
+}
+
+.fc-toolbar-title {
+  @apply !text-xl !font-bold !text-black !uppercase !tracking-widest;
+}
+
+.fc-button {
+  @apply !bg-white !border !border-black !rounded-none !text-black hover:!bg-black hover:!text-white !transition-all !uppercase !text-[10px] !font-bold !tracking-widest;
+}
+
+.fc-button-active {
+  @apply !bg-black !text-white;
+}
+
+.fc-daygrid-day {
+  @apply !border-black;
+}
+
+.fc-daygrid-day-number {
+  @apply !text-black !p-3 !font-bold;
+}
+
+.fc-col-header-cell {
+  @apply !py-4 !text-black !font-bold !uppercase !text-xs !tracking-widest !border-b !border-black;
+}
+
+.fc-event {
+  @apply !cursor-pointer !transition-none !border !border-black !rounded-none !shadow-none;
+  padding: 2px 4px !important;
+}
+
+.fc-event-title {
+  @apply !font-bold !text-[11px] !leading-tight;
+  color: black !important;
+}
+
+.fc-daygrid-event {
+  @apply !my-0.5 !mx-1;
+}
