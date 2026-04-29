@@ -28,15 +28,25 @@ export const createEvent = async (eventData: Omit<Event, 'id' | 'createdAt'>) =>
   });
 };
 
-export const subscribeToEvents = (callback: (events: Event[]) => void) => {
+export const subscribeToEvents = (
+  callback: (events: Event[]) => void,
+  onError?: (error: Error) => void
+) => {
   const q = query(collection(db, EVENTS_COLLECTION), orderBy('startDateTime', 'asc'));
-  return onSnapshot(q, (snapshot) => {
-    const events = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    })) as Event[];
-    callback(events);
-  });
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const events = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Event[];
+      callback(events);
+    },
+    (error) => {
+      console.error('Firestore subscription error:', error);
+      if (onError) onError(error);
+    }
+  );
 };
 
 export const confirmAttendance = async (data: { eventId: string, attendanceMode: 'online' | 'inPerson' }) => {

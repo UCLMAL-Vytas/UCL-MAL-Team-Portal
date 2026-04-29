@@ -49,11 +49,30 @@ export default function TimetableView({ currentWeekStart, onEventClick, timezone
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    const unsubscribe = subscribeToEvents((data) => {
-      setEvents(data);
-      setLoading(false);
-    });
-    return () => unsubscribe();
+    let retryTimeout: ReturnType<typeof setTimeout>;
+
+    const unsubscribe = subscribeToEvents(
+      (data) => {
+        setEvents(data);
+        setLoading(false);
+      },
+      (error) => {
+        console.error('Calendar subscription error, retrying...', error);
+        // Retry after a short delay — this handles the race where
+        // the Firestore listener is established before the auth
+        // token has fully propagated.
+        retryTimeout = setTimeout(() => {
+          setLoading(true);
+          // The component will re-mount or the effect will re-run
+          window.location.reload();
+        }, 2500);
+      }
+    );
+
+    return () => {
+      unsubscribe();
+      clearTimeout(retryTimeout);
+    };
   }, []);
 
   const weekDays = Array.from({ length: 5 }, (_, i) => addDays(currentWeekStart, i));

@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { signInWithGoogle } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 
 export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
@@ -82,24 +81,6 @@ export default function LoginPage() {
             >
               {loading ? 'Authenticating...' : 'Sign in with your UCL MAL Account'}
             </button>
-          </div>
-
-          {/* Email Sign In + Register — side-by-side on md+, stacked on mobile */}
-          <div className="w-full flex flex-col md:flex-row gap-4">
-            <Link
-              id="btn-signin-email"
-              href="/signin"
-              className="flex-1 py-6 text-[13px] font-bold text-black bg-white border border-black hover:bg-black hover:text-white transition-all duration-300 uppercase tracking-widest text-center"
-            >
-              Sign in with Email
-            </Link>
-            <Link
-              id="btn-register"
-              href="/register"
-              className="flex-1 py-6 text-[13px] font-bold text-black bg-white border border-black hover:bg-black hover:text-white transition-all duration-300 uppercase tracking-widest text-center"
-            >
-              Register a New Account
-            </Link>
           </div>
         </div>
       </main>
