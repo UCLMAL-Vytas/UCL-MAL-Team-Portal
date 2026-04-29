@@ -3,6 +3,7 @@ import {
   collection, 
   addDoc, 
   getDocs, 
+  getDoc,
   query, 
   where, 
   orderBy, 
@@ -10,13 +11,15 @@ import {
   Timestamp,
   deleteDoc,
   doc,
-  setDoc
+  setDoc,
+  updateDoc
 } from 'firebase/firestore';
 import { Event, Attendance } from '@/types';
 import { auth } from './firebase';
 
 const EVENTS_COLLECTION = 'events';
 const ATTENDANCE_COLLECTION = 'attendances';
+const USERS_COLLECTION = 'users';
 
 export const createEvent = async (eventData: Omit<Event, 'id' | 'createdAt'>) => {
   return addDoc(collection(db, EVENTS_COLLECTION), {
@@ -75,4 +78,24 @@ export const getAttendancesForEvent = async (eventId: string) => {
   const q = query(collection(db, ATTENDANCE_COLLECTION), where('eventId', '==', eventId));
   const snapshot = await getDocs(q);
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Attendance[];
+};
+
+// Timezone preference persistence
+export const getUserTimezone = async (userId: string): Promise<string | null> => {
+  try {
+    const userDoc = await getDoc(doc(db, USERS_COLLECTION, userId));
+    if (userDoc.exists()) {
+      return userDoc.data()?.timezone || null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+export const setUserTimezone = async (timezone: string) => {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Not authenticated');
+  
+  await setDoc(doc(db, USERS_COLLECTION, user.uid), { timezone }, { merge: true });
 };

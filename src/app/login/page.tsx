@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { signInWithGoogle } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
@@ -61,9 +62,9 @@ export default function LoginPage() {
         </a>
       </header>
       
-      {/* Main Content (Just the Button) */}
+      {/* Main Content */}
       <main className="flex-grow flex flex-col items-center justify-center p-6 -mt-20">
-        <div className="w-full max-w-xl space-y-8 text-center">
+        <div className="w-full max-w-xl space-y-4 text-center">
           
           {error && (
             <div className="w-full p-4 text-xs text-red-600 bg-red-50 border border-red-200 rounded-none tracking-widest uppercase">
@@ -71,14 +72,34 @@ export default function LoginPage() {
             </div>
           )}
 
+          {/* UCL MAL Account Button */}
           <div className="w-full">
             <button
+              id="btn-login-google"
               onClick={handleGoogleLogin}
               disabled={loading}
               className="w-full py-6 text-[13px] font-bold text-white bg-black border border-black hover:bg-white hover:text-black transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-widest"
             >
               {loading ? 'Authenticating...' : 'Sign in with your UCL MAL Account'}
             </button>
+          </div>
+
+          {/* Email Sign In + Register — side-by-side on md+, stacked on mobile */}
+          <div className="w-full flex flex-col md:flex-row gap-4">
+            <Link
+              id="btn-signin-email"
+              href="/signin"
+              className="flex-1 py-6 text-[13px] font-bold text-black bg-white border border-black hover:bg-black hover:text-white transition-all duration-300 uppercase tracking-widest text-center"
+            >
+              Sign in with Email
+            </Link>
+            <Link
+              id="btn-register"
+              href="/register"
+              className="flex-1 py-6 text-[13px] font-bold text-black bg-white border border-black hover:bg-black hover:text-white transition-all duration-300 uppercase tracking-widest text-center"
+            >
+              Register a New Account
+            </Link>
           </div>
         </div>
       </main>

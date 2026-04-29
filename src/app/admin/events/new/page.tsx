@@ -15,7 +15,7 @@ export default function NewEventPage() {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    type: 'online' as 'online' | 'inPerson' | 'hybrid',
+    type: 'hybrid' as 'online' | 'inPerson' | 'hybrid',
     startDate: '',
     startTime: '',
     endDate: '',
@@ -23,7 +23,7 @@ export default function NewEventPage() {
     locationName: '',
     locationAddress: '',
     locationMapsLink: '',
-    onlineLink: '',
+    onlineLink: 'https://ucl.zoom.us/j/94441566871?pwd=N1TO3Dhs97cwAQyWjOOpiuWng0WzWF.1',
     color: '#cfe2f3'
   });
 
@@ -56,7 +56,7 @@ export default function NewEventPage() {
           address: formData.locationAddress,
           mapsLink: formData.locationMapsLink
         } : null,
-        onlineLink: formData.type !== 'inPerson' ? formData.onlineLink : null,
+        onlineLink: formData.onlineLink || 'https://ucl.zoom.us/j/94441566871?pwd=N1TO3Dhs97cwAQyWjOOpiuWng0WzWF.1',
         color: formData.color,
         createdBy: auth.currentUser.uid
       });

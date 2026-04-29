@@ -6,6 +6,7 @@ export interface User {
   displayName: string;
   photoURL: string;
   joinedAt: Timestamp;
+  timezone?: string;
 }
 
 export interface Event {

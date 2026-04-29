@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { onAuthStateChanged, FirebaseUser, signOut } from '@/lib/auth';
 import { auth } from '@/lib/firebase';
 
-const PUBLIC_PATHS = ['/login'];
+const PUBLIC_PATHS = ['/login', '/signin', '/register'];
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);

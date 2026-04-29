@@ -1,25 +1,52 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { subscribeToEvents } from '@/lib/firestore';
 import { Event } from '@/types';
 import { format, addDays, isSameDay } from 'date-fns';
+import { toZonedTime } from 'date-fns-tz';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 
 interface TimetableViewProps {
   currentWeekStart: Date;
   onEventClick: (event: Event) => void;
+  timezone: string;
+  show24h: boolean;
 }
 
-const TIME_SLOTS = [
-  { label: '1pm-3pm', start: 13, end: 15 },
-  { label: '3pm-4pm', start: 15, end: 16 },
-  { label: '4pm-6pm', start: 16, end: 18 },
-  { label: '6pm-8pm', start: 18, end: 20 },
-];
+// Generate all 24 one-hour slots
+const ALL_24_SLOTS = Array.from({ length: 24 }, (_, i) => ({
+  start: i,
+  end: i + 1,
+}));
 
-export default function TimetableView({ currentWeekStart, onEventClick }: TimetableViewProps) {
+// Bank holiday: first Monday of the sprint (May 4, 2026)
+const BANK_HOLIDAY = new Date(2026, 4, 4);
+
+function getZonedHour(date: Date, timezone: string): number {
+  return toZonedTime(date, timezone).getHours();
+}
+
+function isBankHoliday(day: Date): boolean {
+  return isSameDay(day, BANK_HOLIDAY);
+}
+
+function formatHour(h: number): string {
+  if (h === 0 || h === 24) return '12am';
+  if (h === 12) return '12pm';
+  if (h > 12) return `${h - 12}pm`;
+  return `${h}am`;
+}
+
+function slotLabel(slot: { start: number; end: number }): string {
+  return `${formatHour(slot.start)}–${formatHour(slot.end)}`;
+}
+
+export default function TimetableView({ currentWeekStart, onEventClick, timezone, show24h }: TimetableViewProps) {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
+  // Mobile: per-day expand for 24h
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const unsubscribe = subscribeToEvents((data) => {
@@ -31,6 +58,48 @@ export default function TimetableView({ currentWeekStart, onEventClick }: Timeta
 
   const weekDays = Array.from({ length: 5 }, (_, i) => addDays(currentWeekStart, i));
 
+  // Compute which 1-hour slots have events across the entire week (timezone-aware)
+  const activeSlots = useMemo(() => {
+    const hoursWithEvents = new Set<number>();
+
+    for (const event of events) {
+      const startDate = event.startDateTime.toDate();
+      const endDate = event.endDateTime.toDate();
+      const zonedStart = toZonedTime(startDate, timezone);
+      const zonedEnd = toZonedTime(endDate, timezone);
+
+      // Check if this event falls on any day of this week
+      const isThisWeek = weekDays.some(day => isSameDay(zonedStart, day));
+      if (!isThisWeek) continue;
+
+      const startH = zonedStart.getHours();
+      let endH = zonedEnd.getHours();
+      if (endH === 0 || zonedEnd.getDate() !== zonedStart.getDate()) endH = 24;
+
+      for (let h = startH; h < endH; h++) {
+        hoursWithEvents.add(h);
+      }
+    }
+
+    if (hoursWithEvents.size === 0) {
+      return ALL_24_SLOTS.filter(s => s.start >= 9 && s.start < 18);
+    }
+
+    return ALL_24_SLOTS.filter(s => hoursWithEvents.has(s.start));
+  }, [events, timezone, weekDays]);
+
+  // Desktop slots: either active-only or all 24h
+  const desktopSlots = show24h ? ALL_24_SLOTS : activeSlots;
+
+  const toggleDayExpanded = (dayKey: string) => {
+    setExpandedDays(prev => {
+      const next = new Set(prev);
+      if (next.has(dayKey)) next.delete(dayKey);
+      else next.add(dayKey);
+      return next;
+    });
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64 border border-black">
@@ -40,84 +109,243 @@ export default function TimetableView({ currentWeekStart, onEventClick }: Timeta
   }
 
   return (
-    <div className="w-full overflow-x-auto">
-      <table className="w-full border-collapse border border-black text-black font-[Helvetica,Arial,sans-serif]">
-        <thead>
-          <tr className="bg-[#efefef]">
-            <th className="border border-black p-4 text-left text-[10px] font-bold uppercase tracking-widest w-40">Date</th>
-            {TIME_SLOTS.map(slot => (
-              <th key={slot.label} className="border border-black p-4 text-left text-[10px] font-bold uppercase tracking-widest">
-                {slot.label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {weekDays.map(day => (
-            <tr key={day.toISOString()} className="h-64">
-              <td className="border border-black p-4 bg-[#efefef] align-top">
-                <div className="font-bold text-[10px] uppercase leading-tight tracking-widest opacity-60 mb-1">
-                  {format(day, 'EEEE')}
-                </div>
-                <div className="font-bold text-xl uppercase">
-                  {format(day, 'do')}
-                </div>
-              </td>
-              {TIME_SLOTS.map(slot => {
-                const dayEvents = events.filter(e => {
-                  const eventDate = e.startDateTime.toDate();
-                  const hour = eventDate.getHours();
-                  return isSameDay(eventDate, day) && hour >= slot.start && hour < slot.end;
-                });
+    <div className="w-full">
 
-                // Break logic: only show if there are events before AND after this slot on the same day
-                const hasEventBefore = events.some(e => isSameDay(e.startDateTime.toDate(), day) && e.startDateTime.toDate().getHours() < slot.start);
-                const hasEventAfter = events.some(e => isSameDay(e.startDateTime.toDate(), day) && e.startDateTime.toDate().getHours() >= slot.end);
-                const isBreakActive = slot.label === '3pm-4pm' && hasEventBefore && hasEventAfter;
+      {/* ==================== DESKTOP ==================== */}
+      <div className="hidden md:block">
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse border border-black text-black font-[Helvetica,Arial,sans-serif]">
+            <thead>
+              <tr className="bg-[#efefef]">
+                <th className="border border-black p-4 text-left text-[10px] font-bold uppercase tracking-widest w-36 sticky left-0 bg-[#efefef] z-10">
+                  Date
+                </th>
+                {desktopSlots.map(slot => (
+                  <th
+                    key={slot.start}
+                    className="border border-black p-2 text-left text-[10px] font-bold uppercase tracking-widest whitespace-nowrap"
+                  >
+                    {slotLabel(slot)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {weekDays.map(day => {
+                const bankHoliday = isBankHoliday(day);
 
                 return (
-                  <td 
-                    key={slot.label} 
-                    className="border border-black p-0 align-top h-px"
+                  <tr key={day.toISOString()} className={show24h ? 'h-32' : 'h-48'}>
+                    <td className="border border-black p-4 bg-[#efefef] align-top sticky left-0 z-10">
+                      <div className="font-bold text-[10px] uppercase leading-tight tracking-widest opacity-60 mb-1">
+                        {format(day, 'EEEE')}
+                      </div>
+                      <div className="font-bold text-xl uppercase">
+                        {format(day, 'do')}
+                      </div>
+                    </td>
+                    {bankHoliday ? (
+                      <td
+                        colSpan={desktopSlots.length}
+                        className="border border-black p-6 align-middle text-center bg-[#fafafa]"
+                      >
+                        <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-black/30">
+                          Bank Holiday
+                        </span>
+                      </td>
+                    ) : (
+                      desktopSlots.map(slot => {
+                        const slotEvents = events.filter(e => {
+                          const eventDate = e.startDateTime.toDate();
+                          const zonedDate = toZonedTime(eventDate, timezone);
+                          const hour = zonedDate.getHours();
+                          return isSameDay(zonedDate, day) && hour >= slot.start && hour < slot.end;
+                        });
+
+                        return (
+                          <td
+                            key={slot.start}
+                            className="border border-black p-0 align-stretch"
+                            style={{ height: '1px' }}
+                          >
+                            <div className="flex flex-col" style={{ minHeight: '100%', height: '100%' }}>
+                              {slotEvents.length > 0 ? (
+                                slotEvents.map(event => (
+                                  <div
+                                    key={event.id}
+                                    onClick={() => onEventClick(event)}
+                                    className="flex-1 w-full p-3 cursor-pointer hover:brightness-95 transition-all flex flex-col justify-between border-b border-black last:border-b-0"
+                                    style={{ backgroundColor: event.color }}
+                                  >
+                                    <h3 className="font-bold text-[12px] leading-tight uppercase mb-1">
+                                      {event.title}
+                                    </h3>
+                                    <div className="text-[8px] font-bold uppercase tracking-widest text-black/60">
+                                      {event.location?.name ? `${event.location.name} + ONLINE` : 'ONLINE'}
+                                    </div>
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="flex-1" />
+                              )}
+                            </div>
+                          </td>
+                        );
+                      })
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ==================== MOBILE ==================== */}
+      <div className="block md:hidden space-y-6">
+        {weekDays.map(day => {
+          const bankHoliday = isBankHoliday(day);
+          const dayKey = day.toISOString();
+          const isDayExpanded = expandedDays.has(dayKey);
+
+          // All events for this day, sorted by time
+          const dayEvents = events
+            .filter(e => {
+              const zonedDate = toZonedTime(e.startDateTime.toDate(), timezone);
+              return isSameDay(zonedDate, day);
+            })
+            .sort((a, b) =>
+              getZonedHour(a.startDateTime.toDate(), timezone) - getZonedHour(b.startDateTime.toDate(), timezone)
+            );
+
+          // 24h slot map for expanded view
+          const slotEventsMap = ALL_24_SLOTS.map(slot => {
+            const slotEvents = dayEvents.filter(e => {
+              const hour = getZonedHour(e.startDateTime.toDate(), timezone);
+              return hour >= slot.start && hour < slot.end;
+            });
+            return { slot, events: slotEvents };
+          });
+
+          return (
+            <div key={dayKey} className="border border-black">
+              {/* Day header */}
+              <div className={`bg-[#efefef] p-4 flex items-center justify-between ${!bankHoliday ? 'border-b border-black' : ''}`}>
+                <div>
+                  <div className="font-bold text-[10px] uppercase leading-tight tracking-widest opacity-60 mb-1">
+                    {format(day, 'EEEE')}
+                  </div>
+                  <div className="font-bold text-xl uppercase">
+                    {format(day, 'do MMMM')}
+                  </div>
+                </div>
+                {bankHoliday ? (
+                  <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-black/30">
+                    Bank Holiday
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => toggleDayExpanded(dayKey)}
+                    className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest border border-black px-3 py-1.5 hover:bg-black hover:text-white transition-all"
                   >
-                    <div className="flex flex-col h-full">
-                      {dayEvents.length > 0 ? (
-                        dayEvents.map(event => (
+                    {isDayExpanded ? (
+                      <>
+                        <span>Collapse</span>
+                        <ChevronUp className="w-3 h-3" />
+                      </>
+                    ) : (
+                      <>
+                        <span>24h View</span>
+                        <ChevronDown className="w-3 h-3" />
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+
+              {/* Activities — only render content area for non-holiday days */}
+              {!bankHoliday && (
+                isDayExpanded ? (
+                  /* Expanded: full 24h — all slots shown */
+                  <div className="divide-y divide-black">
+                    {slotEventsMap.map(({ slot, events: slotEvts }) => (
+                      <div key={slot.start}>
+                        {slotEvts.length > 0 ? (
+                          slotEvts.map(event => {
+                            const startH = getZonedHour(event.startDateTime.toDate(), timezone);
+                            const endH = getZonedHour(event.endDateTime.toDate(), timezone);
+                            return (
+                              <div
+                                key={event.id}
+                                onClick={() => onEventClick(event)}
+                                className="p-5 cursor-pointer hover:brightness-95 transition-all flex items-center justify-between gap-4"
+                                style={{ backgroundColor: event.color }}
+                              >
+                                <div className="flex-1 min-w-0">
+                                  <h3 className="font-bold text-[14px] leading-tight uppercase mb-1.5">
+                                    {event.title}
+                                  </h3>
+                                  <div className="text-[9px] font-bold uppercase tracking-widest text-black/60">
+                                    {event.location?.name ? `${event.location.name} + ONLINE` : 'ONLINE'}
+                                  </div>
+                                </div>
+                                <div className="text-[10px] font-bold uppercase tracking-widest text-black/50 whitespace-nowrap shrink-0">
+                                  {formatHour(startH)}–{formatHour(endH)}
+                                </div>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div className="px-4 py-2.5 flex items-center justify-between">
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-black/10">
+                              —
+                            </span>
+                            <span className="text-[9px] font-bold uppercase tracking-widest text-black/15">
+                              {slotLabel(slot)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  /* Collapsed: only scheduled events */
+                  dayEvents.length > 0 ? (
+                    <div className="divide-y divide-black">
+                      {dayEvents.map(event => {
+                        const startH = getZonedHour(event.startDateTime.toDate(), timezone);
+                        const endH = getZonedHour(event.endDateTime.toDate(), timezone);
+                        return (
                           <div
                             key={event.id}
                             onClick={() => onEventClick(event)}
-                            className="flex-1 w-full p-6 cursor-pointer hover:brightness-95 transition-all flex flex-col justify-between border-b border-black last:border-b-0"
+                            className="p-5 cursor-pointer hover:brightness-95 transition-all flex items-center justify-between gap-4"
                             style={{ backgroundColor: event.color }}
                           >
-                            <div>
-                              <h3 className="font-bold text-[15px] leading-tight uppercase mb-3">
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-bold text-[14px] leading-tight uppercase mb-1.5">
                                 {event.title}
                               </h3>
+                              <div className="text-[9px] font-bold uppercase tracking-widest text-black/60">
+                                {event.location?.name ? `${event.location.name} + ONLINE` : 'ONLINE'}
+                              </div>
                             </div>
-                            <div className="text-[10px] font-bold uppercase tracking-widest text-black/60">
-                              {event.type === 'online' ? 'ONLINE' : (event.location?.name || 'TBC')}
+                            <div className="text-[10px] font-bold uppercase tracking-widest text-black/50 whitespace-nowrap shrink-0">
+                              {formatHour(startH)}–{formatHour(endH)}
                             </div>
                           </div>
-                        ))
-                      ) : (
-                        isBreakActive ? (
-                          <div className="flex-1 w-full p-4 flex items-start bg-slate-50/50">
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-black/20 italic">
-                              break
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="flex-1 h-full" />
-                        )
-                      )}
+                        );
+                      })}
                     </div>
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                  ) : (
+                    <div className="h-12" />
+                  )
+                )
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
