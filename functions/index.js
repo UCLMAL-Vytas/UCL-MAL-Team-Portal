@@ -2,18 +2,17 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, Timestamp } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
-const { Resend } = require("resend");
+const nodemailer = require("nodemailer");
 const { defineSecret } = require("firebase-functions/params");
 
 initializeApp();
 
 const db = getFirestore();
 const auth = getAuth();
-const resendApiKey = defineSecret("RESEND_API_KEY");
+const gmailAppPassword = defineSecret("GMAIL_APP_PASSWORD");
 
 /**
  * Format a date in a given IANA timezone.
- * Pure JS approach — no external tz lib needed.
  */
 function formatInTimezone(date, timezone) {
   try {
@@ -160,10 +159,18 @@ exports.sendEventReminders = onSchedule(
   {
     schedule: "every 5 minutes",
     timeZone: "Europe/London",
-    secrets: [resendApiKey],
+    secrets: [gmailAppPassword],
   },
   async () => {
-    const resend = new Resend(resendApiKey.value());
+    // Create Gmail SMTP transporter
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: "info@uclmal.com",
+        pass: gmailAppPassword.value(),
+      },
+    });
+
     const now = new Date();
 
     // Window: 27 to 33 minutes from now (captures the 30-min mark within a 5-min cron cycle)
@@ -236,7 +243,9 @@ exports.sendEventReminders = onSchedule(
           const tz = userDoc.exists ? userDoc.data()?.timezone : null;
           if (tz && tz !== "Europe/London") {
             if (!timezoneMap[tz]) timezoneMap[tz] = [];
-            timezoneMap[tz].push(userRecord.displayName || userRecord.email || "Unknown");
+            timezoneMap[tz].push(
+              userRecord.displayName || userRecord.email || "Unknown"
+            );
           } else {
             timezoneMap["Europe/London"].push(
               userRecord.displayName || userRecord.email || "Unknown"
@@ -258,14 +267,14 @@ exports.sendEventReminders = onSchedule(
       const html = buildEmailHtml(event, attendeeNames, timezoneMap, startDate, endDate);
 
       try {
-        const result = await resend.emails.send({
+        const result = await transporter.sendMail({
           from: "UCL MAL Portal <info@uclmal.com>",
-          to: emails,
+          to: emails.join(", "),
           subject: `Reminder: ${event.title} starts in 30 minutes`,
           html: html,
         });
 
-        console.log(`✅ Reminder sent for "${event.title}" to ${emails.length} attendee(s):`, result);
+        console.log(`✅ Reminder sent for "${event.title}" to ${emails.length} attendee(s):`, result.messageId);
 
         // Mark as sent
         await db.collection("sentReminders").doc(eventId).set({
