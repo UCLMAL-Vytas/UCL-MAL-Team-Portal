@@ -76,8 +76,8 @@ export default function ReportSubmitPage() {
 
   useEffect(() => {
     fetch('/api/form-options')
-      .then(r => r.json())
-      .then(setFormOptions)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.software_used) setFormOptions(data); })
       .catch(console.error);
 
     getUserAssetsThisWeek(user.uid).then(setUploadsThisWeek);

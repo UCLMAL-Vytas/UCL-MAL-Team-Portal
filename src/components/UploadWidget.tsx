@@ -52,8 +52,8 @@ export default function UploadWidget() {
 
   useEffect(() => {
     fetch('/api/form-options')
-      .then(r => r.json())
-      .then(setFormOptions)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.software_used) setFormOptions(data); })
       .catch(console.error);
   }, []);
 
@@ -149,7 +149,7 @@ export default function UploadWidget() {
   };
 
   const typeOptions = file
-    ? (formOptions?.fileTypes['.' + file.name.split('.').pop()?.toLowerCase()] ?? [])
+    ? (formOptions?.fileTypes?.['.' + file.name.split('.').pop()?.toLowerCase()] ?? [])
     : [];
 
   return (

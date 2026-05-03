@@ -35,7 +35,7 @@ export default function ReportPage() {
         });
         if (res.ok) {
           const data = await res.json();
-          setReports(data.reports ?? []);
+          setReports(Array.isArray(data.reports) ? data.reports : []);
         }
       } catch (err) {
         console.error(err);
