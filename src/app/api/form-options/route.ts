@@ -36,7 +36,7 @@ export async function GET() {
   }
 
   try {
-    const sheets = getSheetsClient();
+    const sheets = await getSheetsClient();
     const sheetId = process.env.GOOGLE_SHEET_ID!;
 
     const [formOpts, fileTypes, projects, disclaimer] = await Promise.all([

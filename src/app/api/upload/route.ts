@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
       ? process.env.GOOGLE_DRIVE_ARCHIVE_FOLDER_ID!
       : process.env.GOOGLE_DRIVE_IP_DISPUTE_FOLDER_ID!;
 
-    const drive = getDriveClient();
+    const drive = await getDriveClient();
     const buffer = Buffer.from(await file.arrayBuffer());
     const stream = Readable.from(buffer);
 
