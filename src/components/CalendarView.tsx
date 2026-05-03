@@ -301,7 +301,7 @@ export default function TimetableView({ currentWeekStart, onEventClick, timezone
                                   {cell.event.title}
                                 </h3>
                                 <div className="text-[8px] font-bold uppercase tracking-widest text-black/60">
-                                  {cell.event.location?.name ? `${cell.event.location.name} + ONLINE` : 'ONLINE'}
+                                  {[cell.event.location?.name, cell.event.onlineLink ? 'ONLINE' : null].filter(Boolean).join(' + ') || ''}
                                 </div>
                               </div>
                             ) : (
@@ -409,7 +409,7 @@ export default function TimetableView({ currentWeekStart, onEventClick, timezone
                                     {event.title}
                                   </h3>
                                   <div className="text-[9px] font-bold uppercase tracking-widest text-black/60">
-                                    {event.location?.name ? `${event.location.name} + ONLINE` : 'ONLINE'}
+                                    {[event.location?.name, event.onlineLink ? 'ONLINE' : null].filter(Boolean).join(' + ') || ''}
                                   </div>
                                 </div>
                                 <div className="text-[10px] font-bold uppercase tracking-widest text-black/50 whitespace-nowrap shrink-0">
@@ -453,7 +453,7 @@ export default function TimetableView({ currentWeekStart, onEventClick, timezone
                                 {event.title}
                               </h3>
                               <div className="text-[9px] font-bold uppercase tracking-widest text-black/60">
-                                {event.location?.name ? `${event.location.name} + ONLINE` : 'ONLINE'}
+                                {[event.location?.name, event.onlineLink ? 'ONLINE' : null].filter(Boolean).join(' + ') || ''}
                               </div>
                             </div>
                             <div className="text-[10px] font-bold uppercase tracking-widest text-black/50 whitespace-nowrap shrink-0">

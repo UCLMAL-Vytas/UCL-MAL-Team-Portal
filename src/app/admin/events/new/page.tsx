@@ -6,7 +6,7 @@ import { createEvent } from '@/lib/firestore';
 import { auth } from '@/lib/firebase';
 import { Timestamp } from 'firebase/firestore';
 import NavBar from '@/components/NavBar';
-import { Calendar as CalendarIcon, MapPin, Video, Type, FileText, ChevronLeft } from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 
 export default function NewEventPage() {
@@ -15,7 +15,6 @@ export default function NewEventPage() {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    type: 'hybrid' as 'online' | 'inPerson' | 'hybrid',
     startDate: '',
     startTime: '',
     endDate: '',
@@ -23,7 +22,10 @@ export default function NewEventPage() {
     locationName: '',
     locationAddress: '',
     locationMapsLink: '',
-    onlineLink: 'https://ucl.zoom.us/j/94441566871?pwd=N1TO3Dhs97cwAQyWjOOpiuWng0WzWF.1',
+    onlineLink: '',
+    meetingAgendaLink: '',
+    meetingReportLink: '',
+    longDescription: '',
     color: '#cfe2f3'
   });
 
@@ -33,6 +35,8 @@ export default function NewEventPage() {
     { name: 'Orange', value: '#ffe5cc' },
     { name: 'Yellow', value: '#fff2cc' },
     { name: 'Green', value: '#d9ead3' },
+    { name: 'Mint', value: '#d5e8d4' },
+    { name: 'Lavender', value: '#e1d5e7' },
     { name: 'Gray', value: '#efefef' },
   ];
 
@@ -48,15 +52,17 @@ export default function NewEventPage() {
       await createEvent({
         title: formData.title,
         description: formData.description,
-        type: formData.type,
         startDateTime: Timestamp.fromDate(start),
         endDateTime: Timestamp.fromDate(end),
-        location: formData.type !== 'online' ? {
+        location: formData.locationName ? {
           name: formData.locationName,
-          address: formData.locationAddress,
-          mapsLink: formData.locationMapsLink
+          address: formData.locationAddress || '',
+          mapsLink: formData.locationMapsLink || ''
         } : null,
-        onlineLink: formData.onlineLink || 'https://ucl.zoom.us/j/94441566871?pwd=N1TO3Dhs97cwAQyWjOOpiuWng0WzWF.1',
+        onlineLink: formData.onlineLink || null,
+        meetingAgendaLink: formData.meetingAgendaLink || null,
+        meetingReportLink: formData.meetingReportLink || null,
+        longDescription: formData.longDescription || null,
         color: formData.color,
         createdBy: auth.currentUser.uid
       });
@@ -96,44 +102,28 @@ export default function NewEventPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Description</label>
-              <textarea
-                required
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Short Description</label>
+              <input
                 value={formData.description}
                 onChange={e => setFormData({ ...formData, description: e.target.value })}
-                className="w-full bg-white border border-black rounded-none px-4 py-3 text-black focus:outline-none focus:ring-0 transition-all h-32 text-sm"
-                placeholder="Details about the event..."
+                className="w-full bg-white border border-black rounded-none px-4 py-3 text-black focus:outline-none focus:ring-0 transition-all text-sm"
+                placeholder="Brief description..."
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Event Type</label>
-                <select
-                  value={formData.type}
-                  onChange={e => setFormData({ ...formData, type: e.target.value as any })}
-                  className="w-full bg-white border border-black rounded-none px-4 py-3 text-black focus:outline-none appearance-none text-sm"
-                >
-                  <option value="online">Online</option>
-                  <option value="inPerson">In-Person</option>
-                  <option value="hybrid">Hybrid</option>
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Event Color</label>
-                <div className="flex gap-2 pt-1">
-                  {COLORS.map(c => (
-                    <button
-                      key={c.value}
-                      type="button"
-                      onClick={() => setFormData({ ...formData, color: c.value })}
-                      className={`w-8 h-8 border border-black ${formData.color === c.value ? 'ring-2 ring-black ring-offset-2' : ''}`}
-                      style={{ backgroundColor: c.value }}
-                      title={c.name}
-                    />
-                  ))}
-                </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Event Color</label>
+              <div className="flex gap-2 pt-1">
+                {COLORS.map(c => (
+                  <button
+                    key={c.value}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, color: c.value })}
+                    className={`w-8 h-8 border border-black ${formData.color === c.value ? 'ring-2 ring-black ring-offset-2' : ''}`}
+                    style={{ backgroundColor: c.value }}
+                    title={c.name}
+                  />
+                ))}
               </div>
             </div>
 
@@ -150,27 +140,45 @@ export default function NewEventPage() {
               </div>
             </div>
 
-            {(formData.type === 'inPerson' || formData.type === 'hybrid') && (
-              <div className="space-y-4 pt-6 border-t border-black">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                  Location Details
-                </label>
-                <div className="grid grid-cols-1 gap-4">
-                  <input placeholder="Location Name" value={formData.locationName} onChange={e => setFormData({ ...formData, locationName: e.target.value })} className="w-full bg-white border border-black rounded-none px-4 py-3 text-black text-sm" />
-                  <input placeholder="Address" value={formData.locationAddress} onChange={e => setFormData({ ...formData, locationAddress: e.target.value })} className="w-full bg-white border border-black rounded-none px-4 py-3 text-black text-sm" />
-                  <input placeholder="Google Maps Link" value={formData.locationMapsLink} onChange={e => setFormData({ ...formData, locationMapsLink: e.target.value })} className="w-full bg-white border border-black rounded-none px-4 py-3 text-black text-sm" />
-                </div>
+            <div className="space-y-4 pt-6 border-t border-black">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                Physical Location (optional)
+              </label>
+              <div className="grid grid-cols-1 gap-4">
+                <input placeholder="Location Name" value={formData.locationName} onChange={e => setFormData({ ...formData, locationName: e.target.value })} className="w-full bg-white border border-black rounded-none px-4 py-3 text-black text-sm" />
+                <input placeholder="Address" value={formData.locationAddress} onChange={e => setFormData({ ...formData, locationAddress: e.target.value })} className="w-full bg-white border border-black rounded-none px-4 py-3 text-black text-sm" />
+                <input placeholder="Google Maps Link" value={formData.locationMapsLink} onChange={e => setFormData({ ...formData, locationMapsLink: e.target.value })} className="w-full bg-white border border-black rounded-none px-4 py-3 text-black text-sm" />
               </div>
-            )}
+            </div>
 
-            {(formData.type === 'online' || formData.type === 'hybrid') && (
-              <div className="space-y-4 pt-6 border-t border-black">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                  Online Details
-                </label>
-                <input placeholder="Meeting Link (Zoom, Teams, etc.)" value={formData.onlineLink} onChange={e => setFormData({ ...formData, onlineLink: e.target.value })} className="w-full bg-white border border-black rounded-none px-4 py-3 text-black text-sm" />
+            <div className="space-y-4 pt-6 border-t border-black">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                Online Meeting Link (optional)
+              </label>
+              <input placeholder="Meeting Link (Zoom, Teams, etc.)" value={formData.onlineLink} onChange={e => setFormData({ ...formData, onlineLink: e.target.value })} className="w-full bg-white border border-black rounded-none px-4 py-3 text-black text-sm" />
+            </div>
+
+            <div className="space-y-4 pt-6 border-t border-black">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                Meeting Links (optional)
+              </label>
+              <div className="grid grid-cols-1 gap-4">
+                <input placeholder="Meeting Agenda Link" value={formData.meetingAgendaLink} onChange={e => setFormData({ ...formData, meetingAgendaLink: e.target.value })} className="w-full bg-white border border-black rounded-none px-4 py-3 text-black text-sm" />
+                <input placeholder="Meeting Report Link" value={formData.meetingReportLink} onChange={e => setFormData({ ...formData, meetingReportLink: e.target.value })} className="w-full bg-white border border-black rounded-none px-4 py-3 text-black text-sm" />
               </div>
-            )}
+            </div>
+
+            <div className="space-y-2 pt-6 border-t border-black">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                Long Description (optional)
+              </label>
+              <textarea
+                value={formData.longDescription}
+                onChange={e => setFormData({ ...formData, longDescription: e.target.value })}
+                className="w-full bg-white border border-black rounded-none px-4 py-3 text-black focus:outline-none focus:ring-0 transition-all h-32 text-sm"
+                placeholder="Detailed description for the event..."
+              />
+            </div>
 
             <button
               type="submit"

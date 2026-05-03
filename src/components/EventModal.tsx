@@ -4,12 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { Event, Attendance } from '@/types';
 import { confirmAttendance, cancelAttendance, getUserAttendance, getAttendancesForEvent } from '@/lib/firestore';
 import { auth } from '@/lib/firebase';
-import { MapPin, Video, Users, Clock, Calendar as CalendarIcon, X, Globe } from 'lucide-react';
+import { MapPin, Video, Users, Clock, Calendar as CalendarIcon, X, Globe, FileText, ClipboardList } from 'lucide-react';
 import { toZonedTime } from 'date-fns-tz';
-
-const ZOOM_LINK = 'https://ucl.zoom.us/j/94441566871?pwd=N1TO3Dhs97cwAQyWjOOpiuWng0WzWF.1';
-const ZOOM_MEETING_ID = '944 4156 6871';
-const ZOOM_PASSCODE = '680782';
 
 interface EventModalProps {
   event: Event;
@@ -25,8 +21,10 @@ export default function EventModal({ event, onClose, timezone }: EventModalProps
 
   const user = auth.currentUser;
 
-  // All organised events now have an online option, so treat them as hybrid
-  const effectiveType = event.type === 'online' ? 'online' : 'hybrid';
+  // Determine if event has both physical and online options
+  const hasPhysicalLocation = !!(event.location?.name || event.location?.mapsLink);
+  const hasOnlineLink = !!event.onlineLink;
+  const isHybrid = hasPhysicalLocation && hasOnlineLink;
 
   useEffect(() => {
     const fetchData = async () => {
@@ -42,14 +40,14 @@ export default function EventModal({ event, onClose, timezone }: EventModalProps
 
   const handleConfirm = async () => {
     if (!user) return;
-    if (effectiveType === 'hybrid' && !mode) {
+    if (isHybrid && !mode) {
       alert('Please select how you will attend (In-person or Online)');
       return;
     }
 
     setLoading(true);
     try {
-      const selectedMode = effectiveType === 'hybrid' ? mode : 'online';
+      const selectedMode = isHybrid ? mode : (hasOnlineLink ? 'online' : 'inPerson');
       await confirmAttendance({
         eventId: event.id,
         attendanceMode: selectedMode!
@@ -87,9 +85,6 @@ export default function EventModal({ event, onClose, timezone }: EventModalProps
   const formatDate = (d: Date) => d.toLocaleDateString('en-GB', { weekday: 'long', month: 'long', day: 'numeric' });
   const formatTime = (d: Date) => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
 
-  // Get a short timezone label
-  const tzLabel = timezone.replace(/_/g, ' ').split('/').pop() || timezone;
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-white/90 backdrop-blur-sm font-[Helvetica,Arial,sans-serif]">
       <div className="relative w-full max-w-xl bg-white border border-black shadow-2xl overflow-hidden p-0 max-h-[90vh] overflow-y-auto">
@@ -101,12 +96,6 @@ export default function EventModal({ event, onClose, timezone }: EventModalProps
         </button>
 
         <div className="p-12">
-          <div className="flex items-center gap-2 mb-6">
-             <span className="text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 border border-black" style={{ backgroundColor: event.color }}>
-              {effectiveType === 'hybrid' ? 'hybrid' : event.type}
-            </span>
-          </div>
-          
           <h2 className="text-3xl font-bold text-black mb-8 uppercase tracking-tight leading-tight">{event.title}</h2>
           
           <div className="space-y-8 text-black">
@@ -126,33 +115,57 @@ export default function EventModal({ event, onClose, timezone }: EventModalProps
                 <span>{timezone}</span>
               </div>
               
-              {/* Location — show if event has a physical location */}
-              {event.location && (
-                <div className="flex items-start gap-4 text-[11px] font-bold uppercase tracking-widest">
-                  <MapPin className="w-4 h-4 mt-0.5" />
-                  <div>
-                    <p>{event.location.name}</p>
-                    <a href={event.location.mapsLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline mt-1 block lowercase tracking-normal font-normal">
-                      google maps
+              {/* Physical location — only render if location data exists */}
+              {hasPhysicalLocation && (
+                <div className="flex items-center gap-4 text-[11px] font-bold uppercase tracking-widest">
+                  <MapPin className="w-4 h-4 shrink-0" />
+                  {event.location?.mapsLink ? (
+                    <a href={event.location.mapsLink} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                      {event.location.name || 'View on Map'}
                     </a>
-                  </div>
+                  ) : (
+                    <span>{event.location?.name}</span>
+                  )}
                 </div>
               )}
               
-              {/* Online link — always shown with standardised Zoom details */}
-              <div className="flex items-start gap-4 text-[11px] font-bold uppercase tracking-widest">
-                <Video className="w-4 h-4 mt-0.5" />
-                <div>
-                  <a href={ZOOM_LINK} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline lowercase tracking-normal font-normal block">
-                    Join Zoom Meeting
+              {/* Online meeting link — only render if present */}
+              {hasOnlineLink && (
+                <div className="flex items-center gap-4 text-[11px] font-bold uppercase tracking-widest">
+                  <Video className="w-4 h-4 shrink-0" />
+                  <a href={event.onlineLink!} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline lowercase tracking-normal font-normal">
+                    Join the online meeting
                   </a>
-                  <div className="mt-2 space-y-1 text-[10px] tracking-wider text-black/60 font-medium">
-                    <p>Meeting ID: {ZOOM_MEETING_ID}</p>
-                    <p>Passcode: {ZOOM_PASSCODE}</p>
-                  </div>
                 </div>
-              </div>
+              )}
+
+              {/* Meeting agenda link — only render if present */}
+              {event.meetingAgendaLink && (
+                <div className="flex items-center gap-4 text-[11px] font-bold uppercase tracking-widest">
+                  <ClipboardList className="w-4 h-4 shrink-0" />
+                  <a href={event.meetingAgendaLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline lowercase tracking-normal font-normal">
+                    Meeting agenda
+                  </a>
+                </div>
+              )}
+
+              {/* Meeting report link — only render if present */}
+              {event.meetingReportLink && (
+                <div className="flex items-center gap-4 text-[11px] font-bold uppercase tracking-widest">
+                  <FileText className="w-4 h-4 shrink-0" />
+                  <a href={event.meetingReportLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline lowercase tracking-normal font-normal">
+                    Meeting report
+                  </a>
+                </div>
+              )}
             </div>
+
+            {/* Long description — only render if present */}
+            {event.longDescription && (
+              <div className="pt-6 border-t border-black/10">
+                <p className="text-sm leading-relaxed text-black/80">{event.longDescription}</p>
+              </div>
+            )}
 
             {/* Attendance Confirmation Section */}
             <div className="pt-8 border-t border-black">
@@ -174,7 +187,7 @@ export default function EventModal({ event, onClose, timezone }: EventModalProps
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {effectiveType === 'hybrid' && (
+                  {isHybrid && (
                     <div className="space-y-4">
                       <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Select Mode</p>
                       <div className="flex gap-8">

@@ -13,7 +13,6 @@ export interface Event {
   id: string;
   title: string;
   description: string;
-  type: 'online' | 'inPerson' | 'hybrid';
   startDateTime: Timestamp;
   endDateTime: Timestamp;
   location: {
@@ -22,6 +21,9 @@ export interface Event {
     mapsLink: string;
   } | null;
   onlineLink: string | null;
+  meetingAgendaLink: string | null;
+  meetingReportLink: string | null;
+  longDescription: string | null;
   color: string;
   createdBy: string;
   createdAt: Timestamp;
