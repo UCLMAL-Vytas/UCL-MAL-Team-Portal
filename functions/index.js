@@ -100,9 +100,19 @@ function buildEmailHtml(event, attendeeNames, timezoneMap, startDate, endDate) {
       </div>`;
   }
 
-  const attendeeList = attendeeNames
-    .map((name) => `<li style="font-size:13px;padding:2px 0;">${name}</li>`)
-    .join("\n");
+  let attendeesHtml = "";
+  if (attendeeNames.length > 0) {
+    const attendeeList = attendeeNames
+      .map((name) => `<li style="font-size:13px;padding:2px 0;">${name}</li>`)
+      .join("\n");
+    attendeesHtml = `
+      <div style="margin-top:20px;padding-top:20px;border-top:1px solid #000;">
+        <div style="font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:2px;color:#888;margin-bottom:8px;">👥 Attending (${attendeeNames.length})</div>
+        <ul style="margin:0;padding-left:18px;">
+          ${attendeeList}
+        </ul>
+      </div>`;
+  }
 
   return `
 <!DOCTYPE html>
@@ -126,13 +136,7 @@ function buildEmailHtml(event, attendeeNames, timezoneMap, startDate, endDate) {
       ${locationHtml}
       ${onlineHtml}
       ${agendaHtml}
-
-      <div style="margin-top:20px;padding-top:20px;border-top:1px solid #000;">
-        <div style="font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:2px;color:#888;margin-bottom:8px;">👥 Attending (${attendeeNames.length})</div>
-        <ul style="margin:0;padding-left:18px;">
-          ${attendeeList}
-        </ul>
-      </div>
+      ${attendeesHtml}
     </div>
 
     <div style="padding:16px 28px;border-top:1px solid #eee;text-align:center;">
@@ -308,7 +312,7 @@ exports.testEventReminder = onRequest(
   { secrets: [gmailAppPassword, testSecret] },
   async (req, res) => {
     const provided = req.query.secret || req.headers["x-test-secret"];
-    if (!provided || provided !== testSecret.value()) {
+    if (!provided || provided !== testSecret.value().trim()) {
       res.status(403).json({ error: "Forbidden" });
       return;
     }
@@ -339,27 +343,26 @@ exports.testEventReminder = onRequest(
 
     const attendees = await collectAttendees(eventId);
 
-    if (!attendees || attendees.emails.length === 0) {
-      res.status(200).json({ message: "No attendees found — no email sent", eventId });
+    const emailsToUse = overrideEmail
+      ? [overrideEmail]
+      : (attendees ? attendees.emails : []);
+
+    if (emailsToUse.length === 0) {
+      res.status(200).json({ message: "No attendees and no overrideEmail — no email sent", eventId });
       return;
     }
 
-    const emailsToUse = overrideEmail ? [overrideEmail] : attendees.emails;
+    const attendeeNames = attendees ? attendees.attendeeNames : [];
+    const timezoneMap   = attendees ? attendees.timezoneMap   : { "Europe/London": [] };
 
     try {
-      await sendReminderEmail(
-        transporter,
-        event,
-        emailsToUse,
-        attendees.attendeeNames,
-        attendees.timezoneMap
-      );
+      await sendReminderEmail(transporter, event, emailsToUse, attendeeNames, timezoneMap);
       res.status(200).json({
         message: "Test reminder sent",
         eventId,
         eventTitle: event.title,
         sentTo: emailsToUse,
-        attendeeCount: attendees.attendeeNames.length,
+        attendeeCount: attendeeNames.length,
         note: "sentReminders NOT updated — this is a test only",
       });
     } catch (err) {
