@@ -3,7 +3,9 @@ from datetime import datetime, timezone
 
 from firebase_functions import scheduler_fn
 from firebase_admin import initialize_app, firestore
-from google.auth import default, impersonated_credentials
+from google.auth import default, iam
+from google.auth.transport import requests as google_requests
+from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
 logging.basicConfig(level=logging.INFO)
@@ -16,15 +18,29 @@ SCOPES = ["https://www.googleapis.com/auth/admin.reports.audit.readonly"]
 
 
 def _reports_service():
-    """Build an Admin Reports API client impersonating the Workspace admin."""
+    """Build an Admin Reports API client using DWD via IAM Signer (no JSON key needed).
+
+    google.auth.iam.Signer calls the IAM signBlob API to sign JWTs on behalf of
+    the running service account. google.oauth2.service_account.Credentials then
+    performs the standard DWD JWT flow with subject=ADMIN_EMAIL.
+    """
     source_creds, _ = default()
-    target_creds = impersonated_credentials.Credentials(
-        source_credentials=source_creds,
-        target_principal=ADMIN_EMAIL,
-        target_scopes=SCOPES,
-        lifetime=3600,
+    request = google_requests.Request()
+    source_creds.refresh(request)
+
+    signer = iam.Signer(
+        request=request,
+        credentials=source_creds,
+        service_account_email=SERVICE_ACCOUNT,
     )
-    return build("admin", "reports_v1", credentials=target_creds)
+    dwd_creds = service_account.Credentials(
+        signer=signer,
+        service_account_email=SERVICE_ACCOUNT,
+        token_uri="https://oauth2.googleapis.com/token",
+        scopes=SCOPES,
+        subject=ADMIN_EMAIL,
+    )
+    return build("admin", "reports_v1", credentials=dwd_creds)
 
 
 @scheduler_fn.on_schedule(

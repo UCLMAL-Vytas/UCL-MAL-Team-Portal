@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { onAuthStateChanged, FirebaseUser, signOut, checkRedirectResult } from '@/lib/auth';
 import { auth } from '@/lib/firebase';
 import { AuthProvider } from './AuthContext';
+import { upsertUserProfile } from '@/lib/firestore';
 
 const PUBLIC_PATHS = ['/login'];
 
@@ -34,6 +35,17 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
           await firebaseUser.getIdToken(true);
         } catch {
           // Token refresh failed — not fatal, continue with existing token
+        }
+
+        try {
+          await upsertUserProfile({
+            uid: firebaseUser.uid,
+            email: firebaseUser.email ?? '',
+            displayName: firebaseUser.displayName ?? '',
+            photoURL: firebaseUser.photoURL,
+          });
+        } catch {
+          // Non-fatal
         }
 
         setUser(firebaseUser);

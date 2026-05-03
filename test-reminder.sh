@@ -12,24 +12,31 @@ PROJECT="portal-uclmal"
 REGION="us-central1"
 OVERRIDE_EMAIL="${2:-vytautasniedvaras@gmail.com}"
 
+TMPFILE=$(mktemp)
+trap "rm -f $TMPFILE" EXIT
+
 echo "Fetching auth tokens..."
 ACCESS_TOKEN=$(gcloud auth print-access-token)
 IDENTITY_TOKEN=$(gcloud auth print-identity-token)
 
-# Fetch upcoming events from Firestore REST API
-EVENTS_JSON=$(curl -sf \
+echo "Fetching events from Firestore..."
+curl -sf \
   -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-  "https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/events?pageSize=50")
+  "https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/events?pageSize=50" \
+  > "$TMPFILE"
 
-# Parse and list upcoming events, pick first if no eventId given
-EVENT_ID=$(python3 - "${1:-}" <<'PYEOF'
+EVENT_ID=$(python3 - "${1:-}" "$TMPFILE" <<'PYEOF'
 import sys, json
 from datetime import datetime, timezone
 
-arg = sys.argv[1]
-data = json.loads(sys.stdin.read())
+arg     = sys.argv[1]
+tmpfile = sys.argv[2]
+
+with open(tmpfile) as f:
+    data = json.load(f)
+
 docs = data.get("documents", [])
-now = datetime.now(timezone.utc)
+now  = datetime.now(timezone.utc)
 
 events = []
 for doc in docs:
@@ -47,10 +54,9 @@ events.sort()
 future = [(dt, eid, t) for dt, eid, t in events if dt > now]
 
 if arg:
-    # validate the given ID exists
     ids = [eid for _, eid, _ in events]
     if arg not in ids:
-        print(f"ERROR: event '{arg}' not found in Firestore", file=sys.stderr)
+        print(f"ERROR: event '{arg}' not found", file=sys.stderr)
         sys.exit(1)
     print(arg)
 else:
@@ -59,7 +65,7 @@ else:
         sys.exit(1)
     print("Upcoming events:", file=sys.stderr)
     for dt, eid, title in future[:10]:
-        marker = " ◀ (using this one)" if eid == future[0][1] else ""
+        marker = "  ◀ using this" if eid == future[0][1] else ""
         print(f"  {dt.strftime('%Y-%m-%d %H:%M')}  {title:<40}  {eid}{marker}", file=sys.stderr)
     print(future[0][1])
 PYEOF

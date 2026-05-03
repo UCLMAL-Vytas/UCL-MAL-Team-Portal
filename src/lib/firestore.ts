@@ -106,6 +106,94 @@ export const getUserTimezone = async (userId: string): Promise<string | null> =>
 export const setUserTimezone = async (timezone: string) => {
   const user = auth.currentUser;
   if (!user) throw new Error('Not authenticated');
-  
+
   await setDoc(doc(db, USERS_COLLECTION, user.uid), { timezone }, { merge: true });
+};
+
+// ── User profile ─────────────────────────────────────────────────────────────
+
+export const upsertUserProfile = async (user: {
+  uid: string;
+  email: string;
+  displayName: string;
+  photoURL: string | null;
+}) => {
+  const username = user.email.split('@')[0];
+  const ref = doc(db, USERS_COLLECTION, user.uid);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) {
+    await setDoc(ref, {
+      uid: user.uid,
+      email: user.email,
+      displayName: user.displayName,
+      photoURL: user.photoURL ?? '',
+      username,
+      bio: '',
+      links: [],
+      joinedAt: Timestamp.now(),
+    });
+  } else {
+    await updateDoc(ref, {
+      displayName: user.displayName,
+      photoURL: user.photoURL ?? '',
+      username,
+    });
+  }
+};
+
+export const getUserProfile = async (uid: string) => {
+  const snap = await getDoc(doc(db, USERS_COLLECTION, uid));
+  if (!snap.exists()) return null;
+  return { id: snap.id, ...snap.data() };
+};
+
+export const getUserByUsername = async (username: string) => {
+  const q = query(collection(db, USERS_COLLECTION), where('username', '==', username));
+  const snap = await getDocs(q);
+  if (snap.empty) return null;
+  return { id: snap.docs[0].id, ...snap.docs[0].data() };
+};
+
+export const updateUserProfile = async (uid: string, data: {
+  bio?: string;
+  links?: { label: string; url: string }[];
+  photoURL?: string;
+}) => {
+  await updateDoc(doc(db, USERS_COLLECTION, uid), data);
+};
+
+// ── Assets ────────────────────────────────────────────────────────────────────
+
+export const getUserAssetsThisWeek = async (uid: string): Promise<number> => {
+  try {
+    const weekStart = new Date();
+    weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+    weekStart.setHours(0, 0, 0, 0);
+    const q = query(
+      collection(db, 'assets'),
+      where('uploadedBy', '==', uid),
+      where('createdAt', '>=', Timestamp.fromDate(weekStart))
+    );
+    const snap = await getDocs(q);
+    return snap.size;
+  } catch {
+    return 0;
+  }
+};
+
+// ── Weekly reports ────────────────────────────────────────────────────────────
+
+export const getLatestWeeklyReport = async (uid: string) => {
+  try {
+    const q = query(
+      collection(db, 'weeklyReports'),
+      where('userId', '==', uid),
+      orderBy('weekEnding', 'desc')
+    );
+    const snap = await getDocs(q);
+    if (snap.empty) return null;
+    return { id: snap.docs[0].id, ...snap.docs[0].data() };
+  } catch {
+    return null;
+  }
 };

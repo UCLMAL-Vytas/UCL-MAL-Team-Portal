@@ -1,13 +1,14 @@
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { initializeApp, getApps } from 'firebase-admin/app';
+import { credential } from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
 
-// Initialize Firebase Admin SDK using the project ID from env vars.
-// When deployed to Vercel or running locally with Application Default Credentials,
-// the SDK will automatically pick up credentials.
 if (getApps().length === 0) {
   initializeApp({
+    credential: credential.applicationDefault(),
     projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
   });
 }
 
 export const adminDb = getFirestore();
+export const adminAuth = getAuth();

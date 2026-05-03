@@ -39,3 +39,53 @@ export interface Attendance {
   confirmedAt: Timestamp;
   updatedAt: Timestamp;
 }
+
+export interface UserProfile {
+  uid: string;
+  email: string;
+  displayName: string;
+  username: string; // email prefix before @
+  photoURL: string | null; // Firebase Storage URL or Google photo URL
+  bio: string;
+  links: { label: string; url: string }[];
+  joinedAt: Timestamp;
+  timezone?: string;
+}
+
+export interface Asset {
+  id: string;
+  uploadedBy: string; // uid
+  uploaderEmail: string;
+  driveFileId: string;
+  driveLink: string;
+  ipDisputeFolder: boolean; // true if went to dispute folder
+  name: string;
+  type: string;
+  version: string;
+  parentProject: string;
+  dateCreated: Timestamp; // in London time, stored as UTC
+  authors: { name: string; role: string }[];
+  softwareUsed: string[];
+  collaborationNote: string;
+  hasFaces: boolean;
+  hasVoices: boolean;
+  permissionNote: string;
+  ipWaived: boolean;
+  createdAt: Timestamp;
+}
+
+export interface WeeklyReport {
+  id: string;
+  userId: string;
+  userEmail: string;
+  weekEnding: Timestamp; // Sunday 23:59 London
+  hoursFromMeetings: number;
+  additionalHours: number;
+  additionalHoursNote: string;
+  activities: string[];
+  trainingCompleted: string[];
+  skillsLearned: string[];
+  additionalTrainingNeeded: string[];
+  assetIds: string[]; // assets uploaded this week
+  submittedAt: Timestamp;
+}
