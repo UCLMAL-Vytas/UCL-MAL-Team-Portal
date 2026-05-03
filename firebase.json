@@ -11,6 +11,15 @@
         "node_modules",
         ".git"
       ]
+    },
+    {
+      "source": "functions_py",
+      "codebase": "python-functions",
+      "runtime": "python312",
+      "ignore": [
+        ".git",
+        "__pycache__"
+      ]
     }
   ],
   "hosting": {
