@@ -1,6 +1,7 @@
 const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { onRequest } = require("firebase-functions/v2/https");
 const { initializeApp } = require("firebase-admin/app");
-const { getFirestore, Timestamp } = require("firebase-admin/firestore");
+const { getFirestore, Timestamp, FieldValue } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
 const nodemailer = require("nodemailer");
 const { defineSecret } = require("firebase-functions/params");
@@ -10,6 +11,7 @@ initializeApp();
 const db = getFirestore();
 const auth = getAuth();
 const gmailAppPassword = defineSecret("GMAIL_APP_PASSWORD");
+const testSecret = defineSecret("REMINDER_TEST_SECRET");
 
 /**
  * Format a date in a given IANA timezone.
@@ -42,7 +44,6 @@ function tzLabel(tz) {
  * Build the reminder email HTML for one event.
  */
 function buildEmailHtml(event, attendeeNames, timezoneMap, startDate, endDate) {
-  // Build time rows for each unique timezone
   const timeRows = Object.entries(timezoneMap)
     .map(([tz, names]) => {
       const startStr = formatInTimezone(startDate, tz);
@@ -63,7 +64,6 @@ function buildEmailHtml(event, attendeeNames, timezoneMap, startDate, endDate) {
     })
     .join("\n");
 
-  // Location section
   let locationHtml = "";
   if (event.location && event.location.name) {
     locationHtml = `
@@ -78,7 +78,6 @@ function buildEmailHtml(event, attendeeNames, timezoneMap, startDate, endDate) {
       </div>`;
   }
 
-  // Online link section
   let onlineHtml = "";
   if (event.onlineLink) {
     onlineHtml = `
@@ -90,7 +89,6 @@ function buildEmailHtml(event, attendeeNames, timezoneMap, startDate, endDate) {
       </div>`;
   }
 
-  // Meeting agenda section
   let agendaHtml = "";
   if (event.meetingAgendaLink) {
     agendaHtml = `
@@ -102,7 +100,6 @@ function buildEmailHtml(event, attendeeNames, timezoneMap, startDate, endDate) {
       </div>`;
   }
 
-  // Attendees list
   const attendeeList = attendeeNames
     .map((name) => `<li style="font-size:13px;padding:2px 0;">${name}</li>`)
     .join("\n");
@@ -113,14 +110,12 @@ function buildEmailHtml(event, attendeeNames, timezoneMap, startDate, endDate) {
 <head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background:#f5f5f5;font-family:Helvetica,Arial,sans-serif;">
   <div style="max-width:560px;margin:24px auto;background:#fff;border:1px solid #000;">
-    <!-- Header bar -->
     <div style="background:#000;color:#fff;padding:20px 28px;">
       <div style="font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:3px;opacity:0.6;margin-bottom:4px;">Reminder — Starts in 30 minutes</div>
       <div style="font-size:22px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;">${event.title}</div>
     </div>
 
     <div style="padding:28px;">
-      <!-- Time in all attendee timezones -->
       <div style="margin-bottom:20px;">
         <div style="font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:2px;color:#888;margin-bottom:8px;">🕐 Time</div>
         <table style="width:100%;border-collapse:collapse;">
@@ -132,7 +127,6 @@ function buildEmailHtml(event, attendeeNames, timezoneMap, startDate, endDate) {
       ${onlineHtml}
       ${agendaHtml}
 
-      <!-- Attendees -->
       <div style="margin-top:20px;padding-top:20px;border-top:1px solid #000;">
         <div style="font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:2px;color:#888;margin-bottom:8px;">👥 Attending (${attendeeNames.length})</div>
         <ul style="margin:0;padding-left:18px;">
@@ -141,7 +135,6 @@ function buildEmailHtml(event, attendeeNames, timezoneMap, startDate, endDate) {
       </div>
     </div>
 
-    <!-- Footer -->
     <div style="padding:16px 28px;border-top:1px solid #eee;text-align:center;">
       <span style="font-size:10px;text-transform:uppercase;letter-spacing:2px;color:#aaa;">UCL MAL Team Portal</span>
     </div>
@@ -151,9 +144,73 @@ function buildEmailHtml(event, attendeeNames, timezoneMap, startDate, endDate) {
 }
 
 /**
+ * Collect attendee emails and timezone map for an event.
+ * Returns { emails, attendeeNames, timezoneMap } or null if no attendees.
+ */
+async function collectAttendees(eventId) {
+  const attendancesSnapshot = await db
+    .collection("attendances")
+    .where("eventId", "==", eventId)
+    .get();
+
+  if (attendancesSnapshot.empty) return null;
+
+  const attendeeUids = [];
+  const attendeeNames = [];
+  for (const attDoc of attendancesSnapshot.docs) {
+    const att = attDoc.data();
+    attendeeUids.push(att.userId);
+    attendeeNames.push(att.userName);
+  }
+
+  const emails = [];
+  const timezoneMap = { "Europe/London": [] };
+
+  for (const uid of attendeeUids) {
+    try {
+      const userRecord = await auth.getUser(uid);
+      if (userRecord.email) emails.push(userRecord.email);
+
+      const userDoc = await db.collection("users").doc(uid).get();
+      const tz = userDoc.exists ? userDoc.data()?.timezone : null;
+      const displayName = userRecord.displayName || userRecord.email || "Unknown";
+      if (tz && tz !== "Europe/London") {
+        if (!timezoneMap[tz]) timezoneMap[tz] = [];
+        timezoneMap[tz].push(displayName);
+      } else {
+        timezoneMap["Europe/London"].push(displayName);
+      }
+    } catch (err) {
+      console.error(`Failed to look up user ${uid}:`, err.message);
+    }
+  }
+
+  return { emails, attendeeNames, timezoneMap };
+}
+
+/**
+ * Send the reminder email for one event. Returns true on success.
+ */
+async function sendReminderEmail(transporter, event, emails, attendeeNames, timezoneMap) {
+  const startDate = event.startDateTime.toDate();
+  const endDate = event.endDateTime.toDate();
+  const html = buildEmailHtml(event, attendeeNames, timezoneMap, startDate, endDate);
+
+  const result = await transporter.sendMail({
+    from: "UCL MAL Portal <info@uclmal.com>",
+    to: emails.join(", "),
+    subject: `Reminder: ${event.title} starts in 30 minutes`,
+    html,
+  });
+
+  console.log(`✅ Reminder sent for "${event.title}" to ${emails.length} attendee(s):`, result.messageId);
+  return true;
+}
+
+/**
  * Scheduled function: runs every 5 minutes.
- * Checks for events starting in the next 27–33 minute window
- * and sends a single reminder email to all attendees.
+ * Uses an atomic Firestore create() as a distributed lock so exactly one
+ * reminder is sent per event, even if function instances overlap.
  */
 exports.sendEventReminders = onSchedule(
   {
@@ -162,7 +219,6 @@ exports.sendEventReminders = onSchedule(
     secrets: [gmailAppPassword],
   },
   async () => {
-    // Create Gmail SMTP transporter
     const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
@@ -172,14 +228,12 @@ exports.sendEventReminders = onSchedule(
     });
 
     const now = new Date();
-
-    // Window: 27 to 33 minutes from now (captures the 30-min mark within a 5-min cron cycle)
+    // 27–33 min window captures the 30-min mark within any 5-min cycle
     const windowStart = new Date(now.getTime() + 27 * 60 * 1000);
     const windowEnd = new Date(now.getTime() + 33 * 60 * 1000);
 
-    console.log(`Checking for events between ${windowStart.toISOString()} and ${windowEnd.toISOString()}`);
+    console.log(`Checking events between ${windowStart.toISOString()} and ${windowEnd.toISOString()}`);
 
-    // Query events starting in the window
     const eventsSnapshot = await db
       .collection("events")
       .where("startDateTime", ">=", Timestamp.fromDate(windowStart))
@@ -187,104 +241,129 @@ exports.sendEventReminders = onSchedule(
       .get();
 
     if (eventsSnapshot.empty) {
-      console.log("No events starting in the reminder window.");
+      console.log("No events in reminder window.");
       return;
     }
 
-    console.log(`Found ${eventsSnapshot.size} event(s) in the window.`);
+    console.log(`Found ${eventsSnapshot.size} event(s).`);
 
     for (const eventDoc of eventsSnapshot.docs) {
       const event = eventDoc.data();
       const eventId = eventDoc.id;
+      const reminderRef = db.collection("sentReminders").doc(eventId);
 
-      // Check if reminder already sent
-      const reminderDoc = await db.collection("sentReminders").doc(eventId).get();
-      if (reminderDoc.exists) {
-        console.log(`Reminder already sent for event "${event.title}" (${eventId}), skipping.`);
-        continue;
-      }
-
-      // Get all confirmed attendees
-      const attendancesSnapshot = await db
-        .collection("attendances")
-        .where("eventId", "==", eventId)
-        .get();
-
-      if (attendancesSnapshot.empty) {
-        console.log(`No attendees for event "${event.title}", skipping.`);
-        continue;
-      }
-
-      const attendeeUids = [];
-      const attendeeNames = [];
-      for (const attDoc of attendancesSnapshot.docs) {
-        const att = attDoc.data();
-        attendeeUids.push(att.userId);
-        attendeeNames.push(att.userName);
-      }
-
-      // Get emails and timezones for all attendees
-      const emails = [];
-      // Map: timezone → list of names (for deduplication in email display)
-      const timezoneMap = {};
-      // Always include London as a baseline
-      timezoneMap["Europe/London"] = [];
-
-      for (const uid of attendeeUids) {
-        try {
-          // Get email from Firebase Auth
-          const userRecord = await auth.getUser(uid);
-          if (userRecord.email) {
-            emails.push(userRecord.email);
-          }
-
-          // Get timezone from Firestore users collection
-          const userDoc = await db.collection("users").doc(uid).get();
-          const tz = userDoc.exists ? userDoc.data()?.timezone : null;
-          if (tz && tz !== "Europe/London") {
-            if (!timezoneMap[tz]) timezoneMap[tz] = [];
-            timezoneMap[tz].push(
-              userRecord.displayName || userRecord.email || "Unknown"
-            );
-          } else {
-            timezoneMap["Europe/London"].push(
-              userRecord.displayName || userRecord.email || "Unknown"
-            );
-          }
-        } catch (err) {
-          console.error(`Failed to look up user ${uid}:`, err.message);
-        }
-      }
-
-      if (emails.length === 0) {
-        console.log(`No valid emails for event "${event.title}", skipping.`);
-        continue;
-      }
-
-      // Build and send email
-      const startDate = event.startDateTime.toDate();
-      const endDate = event.endDateTime.toDate();
-      const html = buildEmailHtml(event, attendeeNames, timezoneMap, startDate, endDate);
-
+      // Atomic lock: create() fails if doc already exists (ALREADY_EXISTS / code 6).
+      // This prevents duplicate sends even with concurrent function invocations.
       try {
-        const result = await transporter.sendMail({
-          from: "UCL MAL Portal <info@uclmal.com>",
-          to: emails.join(", "),
-          subject: `Reminder: ${event.title} starts in 30 minutes`,
-          html: html,
-        });
-
-        console.log(`✅ Reminder sent for "${event.title}" to ${emails.length} attendee(s):`, result.messageId);
-
-        // Mark as sent
-        await db.collection("sentReminders").doc(eventId).set({
+        await reminderRef.create({
           eventId,
-          sentAt: Timestamp.now(),
-          recipientCount: emails.length,
+          lockedAt: Timestamp.now(),
+          status: "pending",
         });
       } catch (err) {
-        console.error(`❌ Failed to send reminder for "${event.title}":`, err.message);
+        if (err.code === 6) {
+          console.log(`Reminder already sent/locked for "${event.title}" (${eventId}), skipping.`);
+          continue;
+        }
+        throw err;
       }
+
+      // We hold the lock — collect attendees and send
+      try {
+        const attendees = await collectAttendees(eventId);
+
+        if (!attendees || attendees.emails.length === 0) {
+          console.log(`No attendees/emails for "${event.title}", releasing lock.`);
+          await reminderRef.delete();
+          continue;
+        }
+
+        await sendReminderEmail(transporter, event, attendees.emails, attendees.attendeeNames, attendees.timezoneMap);
+
+        await reminderRef.update({
+          status: "sent",
+          sentAt: Timestamp.now(),
+          recipientCount: attendees.emails.length,
+        });
+      } catch (err) {
+        console.error(`❌ Failed for "${event.title}":`, err.message);
+        // Release lock so the next cycle can retry
+        await reminderRef.delete();
+      }
+    }
+  }
+);
+
+/**
+ * HTTP endpoint for manual testing. Sends a reminder for any event by ID
+ * without touching sentReminders, so production state is unaffected.
+ *
+ * Usage:
+ *   curl "https://<region>-portal-uclmal.cloudfunctions.net/testEventReminder \
+ *        ?eventId=<id>&secret=<REMINDER_TEST_SECRET>[&overrideEmail=you@example.com]"
+ *
+ * overrideEmail: if provided, sends only to this address instead of all attendees.
+ */
+exports.testEventReminder = onRequest(
+  { secrets: [gmailAppPassword, testSecret] },
+  async (req, res) => {
+    const provided = req.query.secret || req.headers["x-test-secret"];
+    if (!provided || provided !== testSecret.value()) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
+    const eventId = req.query.eventId;
+    if (!eventId) {
+      res.status(400).json({ error: "eventId query param required" });
+      return;
+    }
+
+    const overrideEmail = req.query.overrideEmail || null;
+
+    const eventDoc = await db.collection("events").doc(eventId).get();
+    if (!eventDoc.exists) {
+      res.status(404).json({ error: `Event ${eventId} not found` });
+      return;
+    }
+
+    const event = eventDoc.data();
+
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: "info@uclmal.com",
+        pass: gmailAppPassword.value(),
+      },
+    });
+
+    const attendees = await collectAttendees(eventId);
+
+    if (!attendees || attendees.emails.length === 0) {
+      res.status(200).json({ message: "No attendees found — no email sent", eventId });
+      return;
+    }
+
+    const emailsToUse = overrideEmail ? [overrideEmail] : attendees.emails;
+
+    try {
+      await sendReminderEmail(
+        transporter,
+        event,
+        emailsToUse,
+        attendees.attendeeNames,
+        attendees.timezoneMap
+      );
+      res.status(200).json({
+        message: "Test reminder sent",
+        eventId,
+        eventTitle: event.title,
+        sentTo: emailsToUse,
+        attendeeCount: attendees.attendeeNames.length,
+        note: "sentReminders NOT updated — this is a test only",
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
     }
   }
 );
