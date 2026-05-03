@@ -72,8 +72,8 @@ export default function HomePage() {
   // Get short timezone label
   const tzShortLabel = timezone.replace(/_/g, ' ').split('/').pop() || timezone;
 
-  // Week end date (Friday = start + 4 days)
-  const weekEnd = addDays(currentWeekStart, 4);
+  // Week end date (Sunday = start + 6 days)
+  const weekEnd = addDays(currentWeekStart, 6);
 
   // Format the date range label: "MAY 4–8TH" or "APR 28 – MAY 2ND" if crossing months
   const startMonth = format(currentWeekStart, 'MMM');

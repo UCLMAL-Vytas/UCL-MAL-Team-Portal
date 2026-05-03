@@ -157,7 +157,7 @@ export default function TimetableView({ currentWeekStart, onEventClick, timezone
     };
   }, []);
 
-  const weekDays = Array.from({ length: 5 }, (_, i) => addDays(currentWeekStart, i));
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(currentWeekStart, i));
 
   // Compute 1h columns spanning the full active time range for this week.
   // Events that span multiple hours merge via colSpan in the row rendering.
