@@ -259,7 +259,7 @@ exports.sendEventReminders = onSchedule(
 
       try {
         const result = await resend.emails.send({
-          from: "UCL MAL Portal <noreply@uclmal.com>",
+          from: "UCL MAL Portal <info@uclmal.com>",
           to: emails,
           subject: `Reminder: ${event.title} starts in 30 minutes`,
           html: html,
