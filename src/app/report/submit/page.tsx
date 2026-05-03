@@ -1,22 +1,22 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import NavBar from '@/components/NavBar';
 import { useAuth } from '@/components/AuthContext';
 import { auth } from '@/lib/firebase';
 import { getUserAssetsThisWeek } from '@/lib/firestore';
 import type { FormOptions } from '@/app/api/form-options/route';
-import { nextSunday, previousSunday, isSunday, format } from 'date-fns';
-import { toZonedTime } from 'date-fns-tz';
+import { nextSunday, isSunday, format } from 'date-fns';
+import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 
 const LONDON = 'Europe/London';
 
 function londonSundayEnd(): Date {
-  const now = toZonedTime(new Date(), LONDON);
-  const sun = isSunday(now) ? now : nextSunday(now);
+  const nowLondon = toZonedTime(new Date(), LONDON);
+  const sun = isSunday(nowLondon) ? nowLondon : nextSunday(nowLondon);
   sun.setHours(23, 59, 0, 0);
-  return sun;
+  return fromZonedTime(sun, LONDON);
 }
 
 const cls = {
@@ -61,7 +61,7 @@ export default function ReportSubmitPage() {
   const [uploadsThisWeek, setUploadsThisWeek] = useState(0);
   const [submitting, setSubmitting] = useState(false);
 
-  const weekEnding = londonSundayEnd();
+  const weekEnding = useMemo(() => londonSundayEnd(), []);
 
   const [activities, setActivities] = useState<string[]>([]);
   const [activityOther, setActivityOther] = useState('');

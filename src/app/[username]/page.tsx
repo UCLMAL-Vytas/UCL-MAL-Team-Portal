@@ -33,10 +33,10 @@ export default function ProfilePage() {
 
   useEffect(() => {
     getUserByUsername(username).then(p => {
-      setProfile(p as UserProfile | null);
+      setProfile(p);
       if (p) {
-        setBio((p as any).bio ?? '');
-        setLinks((p as any).links ?? []);
+        setBio(p.bio ?? '');
+        setLinks(p.links ?? []);
       }
       setLoading(false);
     });

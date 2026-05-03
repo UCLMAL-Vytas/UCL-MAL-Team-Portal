@@ -39,7 +39,7 @@ export default function CalendarPage() {
   const [showTzPicker, setShowTzPicker] = useState(false);
   const [show24h, setShow24h] = useState(false);
   const [currentWeekStart, setCurrentWeekStart] = useState(
-    startOfWeek(new Date(2026, 4, 4), { weekStartsOn: 1 })
+    startOfWeek(new Date(), { weekStartsOn: 1 })
   );
 
   // Load saved timezone preference from account

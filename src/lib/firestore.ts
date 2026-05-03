@@ -14,7 +14,7 @@ import {
   setDoc,
   updateDoc
 } from 'firebase/firestore';
-import { Event, Attendance } from '@/types';
+import { Event, Attendance, UserProfile } from '@/types';
 import { auth } from './firebase';
 
 const EVENTS_COLLECTION = 'events';
@@ -141,17 +141,17 @@ export const upsertUserProfile = async (user: {
   }
 };
 
-export const getUserProfile = async (uid: string) => {
+export const getUserProfile = async (uid: string): Promise<UserProfile | null> => {
   const snap = await getDoc(doc(db, USERS_COLLECTION, uid));
   if (!snap.exists()) return null;
-  return { id: snap.id, ...snap.data() };
+  return { id: snap.id, ...snap.data() } as UserProfile;
 };
 
-export const getUserByUsername = async (username: string) => {
+export const getUserByUsername = async (username: string): Promise<UserProfile | null> => {
   const q = query(collection(db, USERS_COLLECTION), where('username', '==', username));
   const snap = await getDocs(q);
   if (snap.empty) return null;
-  return { id: snap.docs[0].id, ...snap.docs[0].data() };
+  return { id: snap.docs[0].id, ...snap.docs[0].data() } as UserProfile;
 };
 
 export const updateUserProfile = async (uid: string, data: {

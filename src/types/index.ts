@@ -41,13 +41,14 @@ export interface Attendance {
 }
 
 export interface UserProfile {
+  id?: string;
   uid: string;
   email: string;
   displayName: string;
-  username: string; // email prefix before @
-  photoURL: string | null; // Firebase Storage URL or Google photo URL
-  bio: string;
-  links: { label: string; url: string }[];
+  username: string;
+  photoURL: string | null;
+  bio?: string;
+  links?: { label: string; url: string }[];
   joinedAt: Timestamp;
   timezone?: string;
 }

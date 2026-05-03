@@ -23,7 +23,7 @@ function ProfileWidget({ uid, username }: { uid: string; username: string }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
 
   useEffect(() => {
-    getUserProfile(uid).then(p => setProfile(p as UserProfile | null));
+    getUserProfile(uid).then(setProfile);
   }, [uid]);
 
   return (
